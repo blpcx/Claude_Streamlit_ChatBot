@@ -1,8 +1,6 @@
 # Claude_Streamlit_ChatBot
 
-<video width="640" height="360" controls>
-  <source src="demo3.mp4" type="video/mp4">
-</video>
+![视频描述](demo3.mp4)
 
 > 使用 Streamlit 聊天消息模板的 Claude 聊天机器人。多个独立对话组之间的信息传递：组 A 的最后一个回复成为组 B 的文本输入。对话组继承：将组 A 的系统提示、长文本和用户提示作为组 B 的预设。基于chat_message函数修改，提供更丰富的体验：
 
