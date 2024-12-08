@@ -22,14 +22,3 @@
 - 对话组的继承：保留A对话组的系统提示词、长文本、用户提示词，作为B对话的预设
 - 加载聊天记录
 
-> Claude ChatBot by streamlit chat_message template. Multiple Independent Conversation Groups Information Transfer Between Conversation Groups: The last reply of Group A becomes the text input of Group B Conversation Group Inheritance: Retain the system prompts, long text, and user prompts of Group A as presets for Group B. Modified based on the chat_message function to provide a more enriching experience: 
-- Model Switching
-- Parameter Adjustment
-- System Prompts, Long Text, User Prompts
-- Multi-line Input
-- Streaming Output, Markdown Rendering, One-click Code Copying
-- Send, Save Conversation, Clear Conversation
-- Multiple Independent Conversation Groups
-- Information Transfer Between Conversation Groups: The last reply of Group A becomes the text input of Group B
-- Conversation Group Inheritance: Retain the system prompts, long text, and user prompts of Group A as presets for Group B
-- Load Chat History
