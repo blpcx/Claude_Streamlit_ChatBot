@@ -6,6 +6,10 @@ from dotenv import load_dotenv
 import requests
 import json
 import uuid
+import threading
+import time
+
+st.set_page_config(page_title="Claude Chat", layout="wide")
 
 # .env文件
 load_dotenv()
@@ -27,7 +31,11 @@ if 'conversation_groups' not in st.session_state:
             'messages': [],
             'system_prompt': '',
             'document': '',
-            'user_prompt':''
+            'user_prompt':'',
+            # 新增模型参数
+            'model': 'claude-3-5-haiku-20241022',
+            'temperature': 1.0,
+            'max_tokens': 2000
         }
     ]
 
@@ -45,7 +53,11 @@ def add_conversation_group(name=None):
         'messages': [],
         'system_prompt': '',
         'document': '',
-        'user_prompt':''
+        'user_prompt':'',
+        # 新增模型参数
+        'model': 'claude-3-5-haiku-20241022',
+        'temperature': 1.0,
+        'max_tokens': 2000
     }
 
     st.session_state['conversation_groups'].insert(0, new_group)
@@ -65,27 +77,61 @@ def create_sidebar():
                 st.rerun()
 
         with col2:
-            if index+1 > 0:  # 确保不是第一个对话组
-                if st.button("传递", key=f"transmit_{group['id']}"):
-                    prev_group = st.session_state['conversation_groups'][index - 1]
-                    last_assistant_msg = [msg['content'] for msg in prev_group['messages'] if msg['role'] == 'assistant']
+            if st.button("传递", key=f"transmit_{group['id']}"):
+                # 查找当前对话组
+                current_group = next(
+                    (g for g in st.session_state['conversation_groups'] 
+                    if g['id'] == group['id']), 
+                    None
+                )
 
-                    if last_assistant_msg:
-                        new_group_id = add_conversation_group()
-                        new_group = next(group for group in st.session_state['conversation_groups'] if group['id'] == new_group_id)
-                        new_group['document'] = last_assistant_msg[-1]
+                if current_group:
+                    # 找到当前对话组的最后一个助手消息
+                    last_assistant_msg = [msg['content'] for msg in current_group['messages'] if msg['role'] == 'assistant']
 
-                        st.rerun()
-
-        with col3:
-            if index+1 > 0:  # 确保不是第一个对话组
-                if st.button("继承", key=f"inherit_{group['id']}"):
-                    prev_group = st.session_state['conversation_groups'][index - 1]
+                    # 创建新的对话组
                     new_group_id = add_conversation_group()
                     new_group = next(group for group in st.session_state['conversation_groups'] if group['id'] == new_group_id)
-                    new_group['system_prompt'] = prev_group.get('system_prompt', '')
-                    new_group['document'] = prev_group.get('document', '')
-                    new_group['user_prompt'] = prev_group.get('user_prompt', '')
+
+                    # 如果有助手消息，将最后一个消息作为文档传递
+                    if last_assistant_msg:
+                        new_group['document'] = last_assistant_msg[-1]
+
+                    # 复制其他可能有用的属性
+                    new_group['system_prompt'] = current_group.get('system_prompt', '')
+                    new_group['user_prompt'] = current_group.get('user_prompt', '')
+
+                    # 复制模型参数
+                    new_group['model'] = current_group.get('model', 'claude-3-5-haiku-20241022')
+                    new_group['temperature'] = current_group.get('temperature', 1.0)
+                    new_group['max_tokens'] = current_group.get('max_tokens', 2000)
+
+                    st.rerun()
+
+        with col3:
+            if st.button("继承", key=f"inherit_{group['id']}"):
+                # 找到当前选中的对话组
+                current_group = next(
+                    (g for g in st.session_state['conversation_groups'] 
+                    if g['id'] == st.session_state['current_page']), 
+                    None
+                )
+
+                if current_group:
+                    new_group_id = add_conversation_group()
+                    new_group = next(group for group in st.session_state['conversation_groups'] if group['id'] == new_group_id)
+
+                    # 复制当前对话组的所有属性
+                    new_group['system_prompt'] = current_group.get('system_prompt', '')
+                    new_group['document'] = current_group.get('document', '')
+                    new_group['user_prompt'] = current_group.get('user_prompt', '')
+                    new_group['messages'] = current_group.get('messages', [])
+
+                    # 复制模型参数
+                    new_group['model'] = current_group.get('model', 'claude-3-5-haiku-20241022')
+                    new_group['temperature'] = current_group.get('temperature', 1.0)
+                    new_group['max_tokens'] = current_group.get('max_tokens', 2000)
+
                     st.rerun()
 
     # 添加新对话
@@ -112,6 +158,10 @@ def create_sidebar():
                 new_group['system_prompt'] = chat_data.get('system_prompt', '')
                 new_group['document'] = chat_data.get('document', '')
                 new_group['user_prompt'] = chat_data.get('user_prompt', '')
+                # 恢复模型参数
+                new_group['model'] = chat_data.get('model', 'claude-3-5-haiku-20241022')
+                new_group['temperature'] = chat_data.get('temperature', 1.0)
+                new_group['max_tokens'] = chat_data.get('max_tokens', 2000)
 
                 st.sidebar.success(f"成功加载对话：{selected_file}")
                 st.rerun()
@@ -163,7 +213,7 @@ def render_chat_interface(group):
     container = st.container()
     with container:
         # 系统提示词展示
-        with st.chat_message(name="user", avatar="pathway/to/role.png"):
+        with st.chat_message(name="user", avatar="pathway/to/static/role.png"):
             system_placeholder = st.empty()
             if group['system_prompt']:
                 system_placeholder.markdown(f"```\n{group['system_prompt']}\n```")
@@ -212,11 +262,12 @@ def main():
         col1, col2, col3 = st.columns(3)
         with col1:
             model = st.selectbox("模型", 
-                ["claude-3-5-haiku-20241022","claude-3-5-sonnet-20241022","claude-3-5-sonnet-20240620"])
+                ["claude-3-5-haiku-20241022","claude-3-5-sonnet-20241022","claude-3-5-sonnet-20240620"],
+                index=["claude-3-5-haiku-20241022","claude-3-5-sonnet-20241022","claude-3-5-sonnet-20240620"].index(current_group['model']))
         with col2:
-            temperature = st.slider("Temperature", 0.0, 2.0, 1.0)
+            temperature = st.slider("Temperature", 0.0, 2.0, current_group['temperature'])
         with col3:
-            max_tokens = st.slider("Max Tokens", 1, 8000, 2000)
+            max_tokens = st.slider("Max Tokens", 1, 8000, current_group['max_tokens'])
 
         # 系统提示词输入
         system_prompt = st.text_area("系统提示词", current_group['system_prompt'])
@@ -240,6 +291,10 @@ def main():
 
         # 发送消息逻辑
         if send_btn and user_prompt:
+            # 更新对话组的模型参数
+            current_group['model'] = model
+            current_group['temperature'] = temperature
+            current_group['max_tokens'] = max_tokens
             # 检查是否是命令
             is_command, response = handle_chat_command(user_prompt, current_group)
 
@@ -302,7 +357,11 @@ def main():
                 "name": current_group['name'],
                 "system_prompt": current_group['system_prompt'],
                 "document": current_group['document'],
-                "messages": current_group['messages']
+                "messages": current_group['messages'],
+                # 添加模型参数
+                "model": current_group['model'],
+                "temperature": current_group['temperature'],
+                "max_tokens": current_group['max_tokens']
             }
 
             # 创建保存目录（如果不存在）
